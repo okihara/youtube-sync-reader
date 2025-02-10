@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube 字幕翻訳</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        #player {
+            margin-top: 20px;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+        }
+        #transcript {
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #transcript ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        #transcript li {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        #transcript li:hover {
+            background-color: #f5f5f5;
+        }
+        #transcript li.active {
+            background-color: #e3f2fd;
+        }
+        .controls {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .controls button {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube 字幕翻訳</h1>
+        <div class="form-group">
+            <label for="url">YouTube URL:</label>
+            <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=...">
+        </div>
+        <button id="submit" onclick="processVideo()">翻訳開始</button>
+        <div id="status" style="display: none;"></div>
+    </div>
+
+    <div class="container" id="playerContainer" style="display: none;">
+        <div id="player"></div>
+        <div class="controls">
+            <button onclick="startReading()">読み上げ開始</button>
+            <button onclick="stopReading()">読み上げ停止</button>
+        </div>
+        <div id="transcript">
+            <h3>字幕</h3>
+            <ul id="transcriptList"></ul>
+        </div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        let player;
+        let currentTranscriptIndex = 0;
+        let transcripts = [];
+        let isReading = false;
+        let currentUtterance = null;
+
+        function onYouTubeIframeAPIReady() {
+            // YouTubeプレーヤーの準備完了時に呼ばれる
+        }
+
+        function loadPlayer(videoId) {
+            document.getElementById('playerContainer').style.display = 'block';
+            player = new YT.Player('player', {
+                height: '360',
+                width: '640',
+                videoId: videoId,
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+
+        function onPlayerReady(event) {
+            // プレーヤーの準備完了
+        }
+
+        function onPlayerStateChange(event) {
+            if (event.data === YT.PlayerState.PLAYING) {
+                startReading();
+            } else if (event.data === YT.PlayerState.PAUSED) {
+                stopReading();
+            }
+        }
+
+        function startReading() {
+            if (!isReading) {
+                isReading = true;
+                checkCurrentTime();
+            }
+        }
+
+        function stopReading() {
+            isReading = false;
+            if (currentUtterance) {
+                speechSynthesis.cancel();
+            }
+        }
+
+        function checkCurrentTime() {
+            if (!isReading || !player) {
+                return;
+            }
+
+            const currentTime = player.getCurrentTime();
+            let foundSubtitle = false;
+
+            // 現在の再生時間に合う字幕を探す
+            for (let i = 0; i < transcripts.length; i++) {
+                const subtitle = transcripts[i];
+                const endTime = subtitle.start + subtitle.duration;
+
+                if (currentTime >= subtitle.start && currentTime < endTime) {
+                    if (i !== currentTranscriptIndex) {
+                        currentTranscriptIndex = i;
+                        readCurrentSubtitle();
+                    }
+                    foundSubtitle = true;
+                    break;
+                }
+            }
+
+            // 次の字幕をチェック
+            if (!foundSubtitle && currentTranscriptIndex < transcripts.length - 1) {
+                const nextSubtitle = transcripts[currentTranscriptIndex + 1];
+                if (currentTime >= nextSubtitle.start) {
+                    currentTranscriptIndex++;
+                    readCurrentSubtitle();
+                }
+            }
+
+            // 定期的にチェック
+            setTimeout(checkCurrentTime, 100);
+        }
+
+        function readCurrentSubtitle() {
+            if (!isReading || currentTranscriptIndex >= transcripts.length) {
+                return;
+            }
+
+            if (currentUtterance) {
+                speechSynthesis.cancel();
+            }
+
+            const text = transcripts[currentTranscriptIndex].text;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ja-JP';
+            
+            currentUtterance = utterance;
+            speechSynthesis.speak(utterance);
+
+            // 字幕をハイライト
+            const items = document.querySelectorAll('#transcriptList li');
+            items.forEach(item => item.classList.remove('active'));
+            items[currentTranscriptIndex].classList.add('active');
+            items[currentTranscriptIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        async function processVideo() {
+            const urlInput = document.getElementById('url');
+            const submitButton = document.getElementById('submit');
+            const statusDiv = document.getElementById('status');
+            
+            if (!urlInput.value) {
+                showStatus('URLを入力してください', 'error');
+                return;
+            }
+            
+            submitButton.disabled = true;
+            
+            try {
+                const response = await fetch('http://127.0.0.1:5000/api/process', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        url: urlInput.value
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (data.status === 'completed') {
+                        showStatus('既に処理済みです', 'success');
+                    } else {
+                        showStatus('処理を開始しました。しばらくお待ちください...', 'success');
+                    }
+
+                    // 動画IDを抽出してプレーヤーを読み込む
+                    const videoId = extractVideoId(urlInput.value);
+                    if (videoId) {
+                        loadPlayer(videoId);
+                        loadTranscripts(videoId);
+                    }
+                } else {
+                    showStatus(`エラー: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`エラーが発生しました: ${error.message}`, 'error');
+            } finally {
+                submitButton.disabled = false;
+            }
+        }
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+            statusDiv.className = type;
+        }
+
+        function extractVideoId(url) {
+            const match = url.match(/[?&]v=([^&]+)/);
+            return match ? match[1] : null;
+        }
+
+        async function loadTranscripts(videoId) {
+            try {
+                const response = await fetch(`http://127.0.0.1:5000/api/transcripts/${videoId}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    transcripts = data;
+                    displayTranscripts(transcripts);
+                }
+            } catch (error) {
+                console.error('字幕の読み込みに失敗しました:', error);
+            }
+        }
+
+        function displayTranscripts(transcripts) {
+            const list = document.getElementById('transcriptList');
+            list.innerHTML = '';
+            
+            transcripts.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.textContent = item.text;
+                li.onclick = () => {
+                    currentTranscriptIndex = index;
+                    if (player) {
+                        player.seekTo(item.start);
+                        player.playVideo();
+                    }
+                };
+                list.appendChild(li);
+            });
+        }
+    </script>
+</body>
+</html>
