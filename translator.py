@@ -17,6 +17,17 @@ class Translator:
             openai.api_key = api_key
         self.client = openai.OpenAI()
 
+    def _chunk_subtitles(self, subtitles: List[Dict], chunk_size: int = 50) -> List[List[Dict]]:
+        """
+        字幕データを指定されたサイズのチャンクに分割する
+        Args:
+            subtitles: 分割する字幕データのリスト
+            chunk_size: 1チャンクあたりの字幕数
+        Returns:
+            分割された字幕データのリスト
+        """
+        return [subtitles[i:i + chunk_size] for i in range(0, len(subtitles), chunk_size)]
+
     def translate_subtitles(self, subtitles: List[Dict]) -> List[Dict]:
         """
         字幕データを翻訳する
@@ -28,13 +39,21 @@ class Translator:
             TranslationError: 翻訳処理中にエラーが発生した場合
         """
         try:
-            # 入力データをJSON文字列に変換
-            input_json = json.dumps(subtitles, ensure_ascii=False)
+            # 字幕データをチャンクに分割
+            chunks = self._chunk_subtitles(subtitles)
+            translated_chunks = []
             
-            response = self.client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": """
+            # チャンクごとに翻訳
+            for i, chunk in enumerate(chunks, 1):
+                print(f"チャンク {i}/{len(chunks)} を処理中...")
+                
+                # 入力データをJSON文字列に変換
+                input_json = json.dumps(chunk, ensure_ascii=False)
+                
+                response = self.client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": """
 入力された字幕データの"text"フィールドを日本語に翻訳してください。
 時間情報（start, duration）はそのまま保持してください。
 入力と同じJSON配列形式で返してください：
@@ -47,18 +66,20 @@ class Translator:
     ...
 ]
 """},
-                    {"role": "user", "content": input_json}
-                ],
-            )
+                        {"role": "user", "content": input_json}
+                    ],
+                )
+                
+                try:
+                    result = json.loads(response.choices[0].message.content)
+                    if isinstance(result, list):
+                        translated_chunks.extend(result)
+                    else:
+                        raise TranslationError("予期しないJSONフォーマット")
+                except json.JSONDecodeError as e:
+                    raise TranslationError(f"JSONのパースに失敗しました: {response.choices[0].message.content}")
             
-            try:
-                result = json.loads(response.choices[0].message.content)
-                if isinstance(result, list):
-                    return result
-                else:
-                    raise TranslationError("予期しないJSONフォーマット")
-            except json.JSONDecodeError as e:
-                raise TranslationError(f"JSONのパースに失敗しました: {response.choices[0].message.content}")
+            return translated_chunks
                 
         except Exception as e:
             raise TranslationError(f"翻訳に失敗しました: {str(e)}")
