@@ -17,7 +17,7 @@ class Translator:
             openai.api_key = api_key
         self.client = openai.OpenAI()
 
-    def _chunk_subtitles(self, subtitles: List[Dict], chunk_size: int = 50) -> List[List[Dict]]:
+    def _chunk_subtitles(self, subtitles: List[Dict], chunk_size: int = 100) -> List[List[Dict]]:
         """
         字幕データを指定されたサイズのチャンクに分割する
         Args:
@@ -26,7 +26,10 @@ class Translator:
         Returns:
             分割された字幕データのリスト
         """
-        return [subtitles[i:i + chunk_size] for i in range(0, len(subtitles), chunk_size)]
+        chunks = []
+        for i in range(0, len(subtitles), chunk_size):
+            chunks.append(subtitles[i:i + chunk_size])
+        return chunks
 
     def translate_subtitles(self, subtitles: List[Dict]) -> List[Dict]:
         """
@@ -49,58 +52,62 @@ class Translator:
             # チャンクごとに翻訳
             for i, chunk in enumerate(chunks, 1):
                 print(f"[INFO] チャンク {i}/{len(chunks)} を処理中... ({len(chunk)} 件)")
-                print(f"[DEBUG] チャンク {i} の最初の字幕: {chunk[0]}")
                 
-                # 入力データをJSON文字列に変換
-                input_json = json.dumps(chunk, ensure_ascii=False)
-                print(f"[DEBUG] チャンク {i} のトークン数を計算中...")
+                # チャンク内のテキストを連結
+                texts = []
+                for item in chunk:
+                    # 文の区切りを明確にするためにピリオドを追加
+                    text = item['text'].strip()
+                    if not text.endswith('.'):
+                        text += '.'
+                    texts.append(text)
+                
+                combined_text = ' '.join(texts)
+                print(f"[DEBUG] チャンク {i} の連結テキスト: {combined_text[:100]}...")
                 
                 response = self.client.chat.completions.create(
-                    model="gpt-4",
+                    model="gpt-4o",
                     messages=[
                         {"role": "system", "content": """
-入力された字幕データの"text"フィールドを日本語に翻訳してください。
-時間情報（start, duration）は入力の数値をそのまま保持してください。
-入力と同じJSON配列形式で返してください。
-例：
-[
-    {
-        "start": 1.5,
-        "duration": 2.0,
-        "text": "翻訳されたテキスト"
-    }
-]
+英語のテキストを日本語に翻訳してください。
+入力は複数の文が連結されています。
+各文はピリオドで区切られています。
+翻訳結果も同じ数の文に分かれるようにしてください。
 """},
-                        {"role": "user", "content": input_json}
-                    ],
+                        {"role": "user", "content": combined_text}
+                    ]
                 )
                 
-                try:
-                    response_content = response.choices[0].message.content.strip()
-                    # 文字列がクォートで囲まれている場合は除去
-                    if response_content.startswith('"') and response_content.endswith('"'):
-                        response_content = response_content[1:-1]
-                    # エスケープされた文字列を元に戻す
-                    response_content = response_content.encode().decode('unicode_escape')
-                    result = json.loads(response_content)
-                    
-                    if isinstance(result, list):
-                        print(f"[INFO] チャンク {i} の翻訳が完了しました")
-                        print(f"[DEBUG] チャンク {i} の最初の翻訳結果: {result[0]}")
-                        translated_chunks.extend(result)
+                # 翻訳結果を文単位で分割
+                translated_text = response.choices[0].message.content.strip()
+                translated_sentences = [s.strip() for s in translated_text.split('。') if s.strip()]
+                
+                if len(translated_sentences) != len(chunk):
+                    print(f"[WARN] チャンク {i} の文の数が一致しません: 元={len(chunk)}, 翻訳後={len(translated_sentences)}")
+                    # 数が合わない場合は、元の数に合わせて調整
+                    if len(translated_sentences) > len(chunk):
+                        translated_sentences = translated_sentences[:len(chunk)]
                     else:
-                        raise TranslationError(f"チャンク {i} で予期しないJSONフォーマット")
-                except json.JSONDecodeError as e:
-                    raise TranslationError(f"チャンク {i} でJSONのパースに失敗しました: {response.choices[0].message.content}")
+                        # 足りない分は空文字で補完
+                        translated_sentences.extend([''] * (len(chunk) - len(translated_sentences)))
+                
+                # 翻訳結果を元のタイミング情報と組み合わせる
+                for j, (item, translated) in enumerate(zip(chunk, translated_sentences)):
+                    translated_item = {
+                        'start': item['start'],
+                        'duration': item['duration'],
+                        'text': translated + ('。' if translated else '')
+                    }
+                    translated_chunks.append(translated_item)
+                
+                print(f"[INFO] チャンク {i} の翻訳が完了しました")
+                print(f"[DEBUG] チャンク {i} の最初の翻訳結果: {translated_chunks[-len(chunk)]}")
             
             print(f"[INFO] 全ての翻訳が完了しました（合計 {len(translated_chunks)} 件）")
             return translated_chunks
                 
         except Exception as e:
-            print(f"[ERROR] 翻訳に失敗しました: {str(e)}")
-            import traceback
-            print(f"[DEBUG] スタックトレース:\n{traceback.format_exc()}")
-            raise TranslationError(f"翻訳に失敗しました: {str(e)}")
+            raise TranslationError(str(e))
 
 if __name__ == "__main__":
     # テスト用のサンプルデータ
