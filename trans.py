@@ -49,34 +49,46 @@ def is_already_translated(video_id):
 
 def process_video(video_id):
     try:
+        print(f"[INFO] 動画ID {video_id} の処理を開始します")
+        
         if is_already_translated(video_id):
-            print("この動画は既に処理済みです。")
+            print(f"[INFO] 動画ID {video_id} は既に処理済みです")
             return
 
         # 字幕を取得
+        print(f"[INFO] 字幕データの取得を開始します")
         transcript = get_youtube_transcript(video_id)
         if not transcript:
-            print("字幕が見つかりませんでした。")
+            print("[ERROR] 字幕が見つかりませんでした")
             return
+
+        print(f"[INFO] {len(transcript)} 件の字幕データを取得しました")
+        print(f"[DEBUG] 最初の字幕: {transcript[0]}")
 
         # 翻訳を実行
+        print("[INFO] 翻訳処理を開始します")
         translated_data = translate_text(json.dumps(transcript, ensure_ascii=False))
         if not translated_data:
+            print("[ERROR] 翻訳処理に失敗しました")
             return
 
-        print(translated_data)
+        print(f"[INFO] {len(translated_data)} 件の字幕を翻訳しました")
+        print(f"[DEBUG] 最初の翻訳結果: {translated_data[0]}")
         
         # 結果を保存
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"transcript_{video_id}_{timestamp}.txt"
         
+        print(f"[INFO] 翻訳結果を {filename} に保存します")
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(translated_data, f, ensure_ascii=False, indent=2)
 
-        print(f"字幕を {filename} に保存しました。")
+        print(f"[INFO] 字幕を {filename} に保存しました")
 
     except Exception as e:
-        print(f"処理に失敗しました: {str(e)}")
+        print(f"[ERROR] 処理に失敗しました: {str(e)}")
+        import traceback
+        print(f"[DEBUG] スタックトレース:\n{traceback.format_exc()}")
 
 if __name__ == "__main__":
     # YouTube動画のID

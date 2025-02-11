@@ -39,16 +39,21 @@ class Translator:
             TranslationError: 翻訳処理中にエラーが発生した場合
         """
         try:
+            print("[INFO] 翻訳処理を開始します")
+            
             # 字幕データをチャンクに分割
             chunks = self._chunk_subtitles(subtitles)
+            print(f"[INFO] 字幕データを {len(chunks)} チャンクに分割しました（1チャンク {len(chunks[0])} 件）")
             translated_chunks = []
             
             # チャンクごとに翻訳
             for i, chunk in enumerate(chunks, 1):
-                print(f"チャンク {i}/{len(chunks)} を処理中...")
+                print(f"[INFO] チャンク {i}/{len(chunks)} を処理中... ({len(chunk)} 件)")
+                print(f"[DEBUG] チャンク {i} の最初の字幕: {chunk[0]}")
                 
                 # 入力データをJSON文字列に変換
                 input_json = json.dumps(chunk, ensure_ascii=False)
+                print(f"[DEBUG] チャンク {i} のトークン数を計算中...")
                 
                 response = self.client.chat.completions.create(
                     model="gpt-4",
@@ -73,15 +78,21 @@ class Translator:
                 try:
                     result = json.loads(response.choices[0].message.content)
                     if isinstance(result, list):
+                        print(f"[INFO] チャンク {i} の翻訳が完了しました")
+                        print(f"[DEBUG] チャンク {i} の最初の翻訳結果: {result[0]}")
                         translated_chunks.extend(result)
                     else:
-                        raise TranslationError("予期しないJSONフォーマット")
+                        raise TranslationError(f"チャンク {i} で予期しないJSONフォーマット")
                 except json.JSONDecodeError as e:
-                    raise TranslationError(f"JSONのパースに失敗しました: {response.choices[0].message.content}")
+                    raise TranslationError(f"チャンク {i} でJSONのパースに失敗しました: {response.choices[0].message.content}")
             
+            print(f"[INFO] 全ての翻訳が完了しました（合計 {len(translated_chunks)} 件）")
             return translated_chunks
                 
         except Exception as e:
+            print(f"[ERROR] 翻訳に失敗しました: {str(e)}")
+            import traceback
+            print(f"[DEBUG] スタックトレース:\n{traceback.format_exc()}")
             raise TranslationError(f"翻訳に失敗しました: {str(e)}")
 
 if __name__ == "__main__":
