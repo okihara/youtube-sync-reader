@@ -60,7 +60,7 @@ def process_video(video_id):
             return
 
         # 翻訳を実行
-        translated_data = translate_text(json.dumps(transcript))
+        translated_data = translate_text(json.dumps(transcript, ensure_ascii=False))
         if not translated_data:
             return
 
