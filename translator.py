@@ -60,15 +60,15 @@ class Translator:
                     messages=[
                         {"role": "system", "content": """
 入力された字幕データの"text"フィールドを日本語に翻訳してください。
-時間情報（start, duration）はそのまま保持してください。
-入力と同じJSON配列形式で返してください：
+時間情報（start, duration）は入力の数値をそのまま保持してください。
+入力と同じJSON配列形式で返してください。
+例：
 [
     {
-        "start": 開始時間（秒）,
-        "duration": 継続時間（秒）,
+        "start": 1.5,
+        "duration": 2.0,
         "text": "翻訳されたテキスト"
-    },
-    ...
+    }
 ]
 """},
                         {"role": "user", "content": input_json}
@@ -76,7 +76,14 @@ class Translator:
                 )
                 
                 try:
-                    result = json.loads(response.choices[0].message.content)
+                    response_content = response.choices[0].message.content.strip()
+                    # 文字列がクォートで囲まれている場合は除去
+                    if response_content.startswith('"') and response_content.endswith('"'):
+                        response_content = response_content[1:-1]
+                    # エスケープされた文字列を元に戻す
+                    response_content = response_content.encode().decode('unicode_escape')
+                    result = json.loads(response_content)
+                    
                     if isinstance(result, list):
                         print(f"[INFO] チャンク {i} の翻訳が完了しました")
                         print(f"[DEBUG] チャンク {i} の最初の翻訳結果: {result[0]}")
