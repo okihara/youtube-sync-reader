@@ -69,29 +69,8 @@ def get_transcripts(video_id):
         
         # ファイルを読み込む
         with open(latest_file, 'r', encoding='utf-8') as f:
-            content = f.read()
+            transcripts = json.load(f)
             
-        # 字幕データを解析
-        sections = content.split('=== Transcript ===')
-        if len(sections) != 2:
-            return jsonify({'error': '字幕ファイルの形式が不正です'}), 500
-            
-        # タイミング情報を取得
-        timing_section = sections[0].split('=== Timing Info ===')[1].strip()
-        timings = json.loads(timing_section)
-        
-        # 字幕テキストを取得
-        transcript_lines = [line.strip() for line in sections[1].strip().split('\n') if line.strip()]
-        
-        # タイミングと字幕を組み合わせる
-        transcripts = []
-        for timing, text in zip(timings, transcript_lines):
-            transcripts.append({
-                'start': timing['start'],
-                'duration': timing['duration'],
-                'text': text
-            })
-                
         return jsonify(transcripts)
         
     except Exception as e:

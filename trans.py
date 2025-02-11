@@ -4,20 +4,21 @@ import os
 import glob
 from datetime import datetime
 from youtube_transcript_api import YouTubeTranscriptApi
-import openai
+from translator import Translator, TranslationError
 from dotenv import load_dotenv
 
 # 環境変数の読み込み
 load_dotenv()
 
 # OpenAI APIキーの設定
-openai.api_key = os.getenv('OPENAI_API_KEY')
+# openai.api_key = os.getenv('OPENAI_API_KEY')
 
 def get_youtube_transcript(video_id):
     """YouTubeの文字起こしを取得する"""
     try:
         # まず英語の字幕を試す
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+        print(transcript)
         return transcript
     except Exception as e:
         print(f"文字起こしの取得に失敗しました: {str(e)}")
@@ -26,19 +27,9 @@ def get_youtube_transcript(video_id):
 def translate_text(texts):
     """ChatGPT APIを使用してテキストを翻訳する"""
     try:
-        client = openai.OpenAI()
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "英語のテキストを日本語に翻訳してください。"},
-                *[
-                    {"role": "user", "content": text}
-                    for text in texts
-                ]
-            ]
-        )
-        return [choice.message.content for choice in response.choices]
-    except Exception as e:
+        translator = Translator()
+        return translator.translate_subtitles(texts)
+    except TranslationError as e:
         print(f"翻訳に失敗しました: {str(e)}")
         return None
 
@@ -68,31 +59,19 @@ def process_video(video_id):
             print("字幕が見つかりませんでした。")
             return
 
-        # 翻訳用のテキストを準備
-        texts_to_translate = []
-        timings = []  # 時間情報を保存
-        for entry in transcript:
-            text = entry.get('text', '')
-            if text:
-                texts_to_translate.append(text)
-                timings.append({
-                    'start': entry.get('start', 0),
-                    'duration': entry.get('duration', 2)
-                })
-
         # 翻訳を実行
-        translated_texts = translate_text(texts_to_translate)
+        translated_data = translate_text(json.dumps(transcript))
+        if not translated_data:
+            return
 
+        print(translated_data)
+        
         # 結果を保存
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"transcript_{video_id}_{timestamp}.txt"
         
         with open(filename, "w", encoding="utf-8") as f:
-            f.write("=== Timing Info ===\n")
-            f.write(json.dumps(timings) + "\n")
-            f.write("=== Transcript ===\n")
-            for text in translated_texts:
-                f.write(text + "\n")
+            json.dump(translated_data, f, ensure_ascii=False, indent=2)
 
         print(f"字幕を {filename} に保存しました。")
 
