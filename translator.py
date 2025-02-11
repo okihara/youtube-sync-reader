@@ -17,7 +17,7 @@ class Translator:
             openai.api_key = api_key
         self.client = openai.OpenAI()
 
-    def _chunk_subtitles(self, subtitles: List[Dict], chunk_size: int = 100) -> List[List[Dict]]:
+    def _chunk_subtitles(self, subtitles: List[Dict], chunk_size: int = 25) -> List[List[Dict]]:
         """
         字幕データを指定されたサイズのチャンクに分割する
         Args:
@@ -30,6 +30,29 @@ class Translator:
         for i in range(0, len(subtitles), chunk_size):
             chunks.append(subtitles[i:i + chunk_size])
         return chunks
+
+    def _split_by_punctuation(self, text: str) -> List[str]:
+        """
+        テキストを句読点で分割する
+        Args:
+            text (str): 分割するテキスト
+        Returns:
+            List[str]: 分割されたテキストのリスト
+        """
+        # まず句点で分割
+        sentences = []
+        for sentence in text.split('。'):
+            if not sentence.strip():
+                continue
+            # 読点で分割
+            parts = [p.strip() for p in sentence.split('、')]
+            # 空の部分を除去し、読点を付け直す
+            parts = [(p + '、') for p in parts if p]
+            if parts:
+                # 最後の部分は句点にする
+                parts[-1] = parts[-1].rstrip('、') + '。'
+                sentences.extend(parts)
+        return sentences
 
     def translate_subtitles(self, subtitles: List[Dict]) -> List[Dict]:
         """
@@ -51,57 +74,74 @@ class Translator:
             
             # チャンクごとに翻訳
             for i, chunk in enumerate(chunks, 1):
-                print(f"[INFO] チャンク {i}/{len(chunks)} を処理中... ({len(chunk)} 件)")
-                
-                # チャンク内のテキストを連結
-                texts = []
-                for item in chunk:
-                    # 文の区切りを明確にするためにピリオドを追加
-                    text = item['text'].strip()
-                    if not text.endswith('.'):
-                        text += '.'
-                    texts.append(text)
-                
-                combined_text = ' '.join(texts)
-                print(f"[DEBUG] チャンク {i} の連結テキスト: {combined_text[:100]}...")
-                
-                response = self.client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": """
+                try:
+                    print(f"[INFO] チャンク {i}/{len(chunks)} を処理中... ({len(chunk)} 件)")
+                    
+                    # チャンク内のテキストを連結
+                    texts = []
+                    for item in chunk:
+                        text = item['text'].strip()
+                        if not text.endswith('.'):
+                            text += '.'
+                        texts.append(text)
+                    
+                    combined_text = ' '.join(texts)
+                    print(f"[DEBUG] チャンク {i} の連結テキスト: {combined_text[:100]}...")
+                    
+                    response = self.client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": """
 英語のテキストを日本語に翻訳してください。
 入力は複数の文が連結されています。
 各文はピリオドで区切られています。
-翻訳結果も同じ数の文に分かれるようにしてください。
+できるだけ自然な日本語になるように翻訳してください。
 """},
-                        {"role": "user", "content": combined_text}
-                    ]
-                )
-                
-                # 翻訳結果を文単位で分割
-                translated_text = response.choices[0].message.content.strip()
-                translated_sentences = [s.strip() for s in translated_text.split('。') if s.strip()]
-                
-                if len(translated_sentences) != len(chunk):
-                    print(f"[WARN] チャンク {i} の文の数が一致しません: 元={len(chunk)}, 翻訳後={len(translated_sentences)}")
-                    # 数が合わない場合は、元の数に合わせて調整
-                    if len(translated_sentences) > len(chunk):
-                        translated_sentences = translated_sentences[:len(chunk)]
-                    else:
-                        # 足りない分は空文字で補完
-                        translated_sentences.extend([''] * (len(chunk) - len(translated_sentences)))
-                
-                # 翻訳結果を元のタイミング情報と組み合わせる
-                for j, (item, translated) in enumerate(zip(chunk, translated_sentences)):
-                    translated_item = {
-                        'start': item['start'],
-                        'duration': item['duration'],
-                        'text': translated + ('。' if translated else '')
-                    }
-                    translated_chunks.append(translated_item)
-                
-                print(f"[INFO] チャンク {i} の翻訳が完了しました")
-                print(f"[DEBUG] チャンク {i} の最初の翻訳結果: {translated_chunks[-len(chunk)]}")
+                            {"role": "user", "content": combined_text}
+                        ]
+                    )
+                    
+                    # 翻訳結果を句読点で分割
+                    translated_text = response.choices[0].message.content.strip()
+                    translated_parts = self._split_by_punctuation(translated_text)
+                    
+                    # 分割した部分を元のチャンクの数に合わせて調整
+                    if len(translated_parts) > len(chunk):
+                        # 多すぎる場合は、均等に結合
+                        parts_per_chunk = len(translated_parts) / len(chunk)
+                        adjusted_parts = []
+                        current_parts = []
+                        
+                        for j, part in enumerate(translated_parts):
+                            current_parts.append(part)
+                            if (j + 1) / parts_per_chunk >= len(adjusted_parts) + 1:
+                                adjusted_parts.append(''.join(current_parts))
+                                current_parts = []
+                        
+                        if current_parts:
+                            adjusted_parts.append(''.join(current_parts))
+                        
+                        translated_parts = adjusted_parts[:len(chunk)]
+                    elif len(translated_parts) < len(chunk):
+                        # 少なすぎる場合は空文字で補完
+                        translated_parts.extend([''] * (len(chunk) - len(translated_parts)))
+                    
+                    # 翻訳結果を元のタイミング情報と組み合わせる
+                    for j, (item, translated) in enumerate(zip(chunk, translated_parts)):
+                        translated_item = {
+                            'start': item['start'],
+                            'duration': item['duration'],
+                            'text': translated if translated else ''
+                        }
+                        translated_chunks.append(translated_item)
+                    
+                    print(f"[INFO] チャンク {i} の翻訳が完了しました")
+                    print(f"[DEBUG] チャンク {i} の最初の翻訳結果: {translated_chunks[-len(chunk)]}")
+                    
+                except Exception as e:
+                    print(f"Translation error: {e}")
+                    # エラーの場合は原文をそのまま使用
+                    translated_chunks.extend(chunk)
             
             print(f"[INFO] 全ての翻訳が完了しました（合計 {len(translated_chunks)} 件）")
             return translated_chunks
