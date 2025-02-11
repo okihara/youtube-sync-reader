@@ -4,6 +4,7 @@ from trans import process_video, is_already_translated, get_youtube_transcript
 import re
 import glob
 import json
+import os
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
@@ -57,18 +58,14 @@ def process():
 @app.route('/api/transcripts/<video_id>')
 def get_transcripts(video_id):
     try:
-        # 字幕ファイルを検索
-        pattern = f"transcript_{video_id}_*.txt"
-        matching_files = glob.glob(pattern)
+        # 翻訳済み字幕ファイルのパス
+        ja_subtitle_path = f"subtitles/ja_{video_id}.json"
         
-        if not matching_files:
+        if not os.path.exists(ja_subtitle_path):
             return jsonify({'error': '字幕ファイルが見つかりません'}), 404
             
-        # 最新のファイルを使用
-        latest_file = max(matching_files)
-        
         # ファイルを読み込む
-        with open(latest_file, 'r', encoding='utf-8') as f:
+        with open(ja_subtitle_path, 'r', encoding='utf-8') as f:
             transcripts = json.load(f)
             
         return jsonify(transcripts)
