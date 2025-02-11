@@ -223,8 +223,8 @@
             currentUtterance = new SpeechSynthesisUtterance(subtitle.text);
             currentUtterance.voice = getJapaneseVoice();
             currentUtterance.lang = 'ja-JP';
-            currentUtterance.rate = 1.5;  // 読み上げ速度を1.5倍に
-            currentUtterance.pitch = 1.0;
+            currentUtterance.rate = 1.6;  // 読み上げ速度を1.5倍に
+            currentUtterance.pitch = 0.8;
             speechSynthesis.speak(currentUtterance);
 
             // 字幕をハイライト表示
