@@ -105,6 +105,16 @@
         .controls button {
             flex: 1;
         }
+        .subtitle {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            background-color: #f8f8f8;
+        }
+        .subtitle.current {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196F3;
+        }
     </style>
 </head>
 <body>
@@ -120,10 +130,6 @@
 
     <div class="container" id="playerContainer" style="display: none;">
         <div id="player"></div>
-        <div class="controls">
-            <button onclick="startReading()">読み上げ開始</button>
-            <button onclick="stopReading()">読み上げ停止</button>
-        </div>
         <div id="transcript">
             <h3>字幕</h3>
             <ul id="transcriptList"></ul>
@@ -133,10 +139,94 @@
     <script src="https://www.youtube.com/iframe_api"></script>
     <script>
         let player;
-        let currentTranscriptIndex = 0;
         let transcripts = [];
-        let isReading = false;
+        let currentIndex = 0;
+        let checkTimeInterval;
+        let speechSynth = window.speechSynthesis;
         let currentUtterance = null;
+
+        // 日本語の音声を取得
+        function getJapaneseVoice() {
+            const voices = speechSynthesis.getVoices();
+            return voices.find(voice => voice.lang === 'ja-JP') || voices[0];
+        }
+
+        // 動画の再生状態が変更されたときの処理
+        function onPlayerStateChange(event) {
+            switch (event.data) {
+                case YT.PlayerState.PLAYING:
+                    // 再生開始：読み上げを開始
+                    checkTimeInterval = setInterval(checkCurrentTime, 100);
+                    break;
+                case YT.PlayerState.PAUSED:
+                case YT.PlayerState.ENDED:
+                    // 一時停止または終了：読み上げを停止
+                    if (currentUtterance) {
+                        speechSynthesis.cancel();
+                        currentUtterance = null;
+                    }
+                    clearInterval(checkTimeInterval);
+                    break;
+            }
+        }
+
+        // 現在の再生時間をチェック
+        function checkCurrentTime() {
+            if (!player || !transcripts.length) return;
+
+            const currentTime = player.getCurrentTime();
+            let foundSubtitle = false;
+
+            for (let i = 0; i < transcripts.length; i++) {
+                const subtitle = transcripts[i];
+                const start = subtitle.start;
+                const end = start + subtitle.duration;
+
+                if (currentTime >= start && currentTime < end) {
+                    foundSubtitle = true;
+                    if (i !== currentIndex) {
+                        currentIndex = i;
+                        readCurrentSubtitle();
+                    }
+                    break;
+                }
+            }
+
+            if (!foundSubtitle) {
+                currentIndex = -1;
+                if (currentUtterance) {
+                    speechSynthesis.cancel();
+                    currentUtterance = null;
+                }
+            }
+        }
+
+        // 現在の字幕を読み上げ
+        function readCurrentSubtitle() {
+            if (currentIndex < 0 || currentIndex >= transcripts.length) return;
+
+            const subtitle = transcripts[currentIndex];
+            if (currentUtterance) {
+                speechSynthesis.cancel();
+            }
+
+            currentUtterance = new SpeechSynthesisUtterance(subtitle.text);
+            currentUtterance.voice = getJapaneseVoice();
+            currentUtterance.lang = 'ja-JP';
+            currentUtterance.rate = 1.5;  // 読み上げ速度を1.5倍に
+            currentUtterance.pitch = 1.0;
+            speechSynthesis.speak(currentUtterance);
+
+            // 字幕をハイライト表示
+            const subtitleElements = document.querySelectorAll('.subtitle');
+            subtitleElements.forEach((el, index) => {
+                if (index === currentIndex) {
+                    el.classList.add('current');
+                } else {
+                    el.classList.remove('current');
+                }
+            });
+        }
 
         function onYouTubeIframeAPIReady() {
             // YouTubeプレーヤーの準備完了時に呼ばれる
@@ -157,87 +247,6 @@
 
         function onPlayerReady(event) {
             // プレーヤーの準備完了
-        }
-
-        function onPlayerStateChange(event) {
-            if (event.data === YT.PlayerState.PLAYING) {
-                startReading();
-            } else if (event.data === YT.PlayerState.PAUSED) {
-                stopReading();
-            }
-        }
-
-        function startReading() {
-            if (!isReading) {
-                isReading = true;
-                checkCurrentTime();
-            }
-        }
-
-        function stopReading() {
-            isReading = false;
-            if (currentUtterance) {
-                speechSynthesis.cancel();
-            }
-        }
-
-        function checkCurrentTime() {
-            if (!isReading || !player) {
-                return;
-            }
-
-            const currentTime = player.getCurrentTime();
-            let foundSubtitle = false;
-
-            // 現在の再生時間に合う字幕を探す
-            for (let i = 0; i < transcripts.length; i++) {
-                const subtitle = transcripts[i];
-                const endTime = subtitle.start + subtitle.duration;
-
-                if (currentTime >= subtitle.start && currentTime < endTime) {
-                    if (i !== currentTranscriptIndex) {
-                        currentTranscriptIndex = i;
-                        readCurrentSubtitle();
-                    }
-                    foundSubtitle = true;
-                    break;
-                }
-            }
-
-            // 次の字幕をチェック
-            if (!foundSubtitle && currentTranscriptIndex < transcripts.length - 1) {
-                const nextSubtitle = transcripts[currentTranscriptIndex + 1];
-                if (currentTime >= nextSubtitle.start) {
-                    currentTranscriptIndex++;
-                    readCurrentSubtitle();
-                }
-            }
-
-            // 定期的にチェック
-            setTimeout(checkCurrentTime, 100);
-        }
-
-        function readCurrentSubtitle() {
-            if (!isReading || currentTranscriptIndex >= transcripts.length) {
-                return;
-            }
-
-            if (currentUtterance) {
-                speechSynthesis.cancel();
-            }
-
-            const text = transcripts[currentTranscriptIndex].text;
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'ja-JP';
-            
-            currentUtterance = utterance;
-            speechSynthesis.speak(utterance);
-
-            // 字幕をハイライト
-            const items = document.querySelectorAll('#transcriptList li');
-            items.forEach(item => item.classList.remove('active'));
-            items[currentTranscriptIndex].classList.add('active');
-            items[currentTranscriptIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
         async function processVideo() {
@@ -322,7 +331,7 @@
                 const li = document.createElement('li');
                 li.textContent = item.text;
                 li.onclick = () => {
-                    currentTranscriptIndex = index;
+                    currentIndex = index;
                     if (player) {
                         player.seekTo(item.start);
                         player.playVideo();
