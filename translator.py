@@ -1,5 +1,7 @@
 import json
+import os
 import openai
+import hashlib
 from typing import List, Dict, Optional, Tuple
 
 class TranslationError(Exception):
@@ -16,6 +18,7 @@ class Translator:
 各文はピリオドで区切られています。
 できるだけ自然な日本語になるように翻訳してください。
 """
+    TRANSLATION_DIR = "subtitles/translations"
 
     def __init__(self, api_key: Optional[str] = None, chunk_size: int = DEFAULT_CHUNK_SIZE):
         """
@@ -28,6 +31,53 @@ class Translator:
             openai.api_key = api_key
         self.client = openai.OpenAI()
         self.chunk_size = chunk_size
+        os.makedirs(self.TRANSLATION_DIR, exist_ok=True)
+
+    def _get_chunk_hash(self, chunk: List[Dict]) -> str:
+        """
+        チャンクの内容からハッシュを生成する
+        Args:
+            chunk: ハッシュを生成する字幕チャンク
+        Returns:
+            チャンクのハッシュ値
+        """
+        chunk_text = json.dumps([item['text'] for item in chunk], sort_keys=True)
+        return hashlib.md5(chunk_text.encode()).hexdigest()
+
+    def _get_translation_path(self, chunk_hash: str) -> str:
+        """
+        翻訳ファイルのパスを取得する
+        Args:
+            chunk_hash: チャンクのハッシュ値
+        Returns:
+            翻訳ファイルのパス
+        """
+        return os.path.join(self.TRANSLATION_DIR, f"{chunk_hash}.txt")
+
+    def _load_translation(self, chunk_hash: str) -> Optional[List[str]]:
+        """
+        保存済みの翻訳を読み込む
+        Args:
+            chunk_hash: チャンクのハッシュ値
+        Returns:
+            翻訳テキストのリスト、存在しない場合はNone
+        """
+        translation_path = self._get_translation_path(chunk_hash)
+        if os.path.exists(translation_path):
+            with open(translation_path, 'r', encoding='utf-8') as f:
+                return [line.strip() for line in f.readlines()]
+        return None
+
+    def _save_translation(self, chunk_hash: str, translations: List[str]) -> None:
+        """
+        翻訳をファイルに保存する
+        Args:
+            chunk_hash: チャンクのハッシュ値
+            translations: 翻訳テキストのリスト
+        """
+        translation_path = self._get_translation_path(chunk_hash)
+        with open(translation_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(translations))
 
     def _chunk_subtitles(self, subtitles: List[Dict]) -> List[List[Dict]]:
         """
@@ -124,31 +174,33 @@ class Translator:
             return translated_parts + [''] * (chunk_size - len(translated_parts))
         return translated_parts
 
-    def _process_chunk(self, chunk: List[Dict]) -> List[Dict]:
+    def _process_chunk(self, chunk: List[Dict]) -> List[str]:
         """
         1つのチャンクを処理する
         Args:
             chunk: 処理する字幕チャンク
         Returns:
-            翻訳された字幕チャンク
+            翻訳されたテキストのリスト
         """
         try:
+            chunk_hash = self._get_chunk_hash(chunk)
+            cached_translation = self._load_translation(chunk_hash)
+            
+            if cached_translation:
+                print(f"[INFO] キャッシュされた翻訳を使用します")
+                return cached_translation
+            
             combined_text = self._prepare_chunk_text(chunk)
             translated_text = self._translate_text(combined_text)
             translated_parts = self._split_by_punctuation(translated_text)
             adjusted_parts = self._adjust_translated_parts(translated_parts, len(chunk))
             
-            return [
-                {
-                    'start': item['start'],
-                    'duration': item['duration'],
-                    'text': translated if translated else ''
-                }
-                for item, translated in zip(chunk, adjusted_parts)
-            ]
+            self._save_translation(chunk_hash, adjusted_parts)
+            return adjusted_parts
+            
         except Exception as e:
             print(f"チャンク処理エラー: {e}")
-            return chunk
+            return [''] * len(chunk)
 
     def translate_subtitles(self, subtitles: List[Dict]) -> List[Dict]:
         """
@@ -168,8 +220,16 @@ class Translator:
             translated_subtitles = []
             for i, chunk in enumerate(chunks, 1):
                 print(f"[INFO] チャンク {i}/{len(chunks)} を処理中... ({len(chunk)} 件)")
-                translated_chunk = self._process_chunk(chunk)
-                translated_subtitles.extend(translated_chunk)
+                translated_texts = self._process_chunk(chunk)
+                
+                # 翻訳テキストと元のタイミング情報を組み合わせる
+                for item, translated_text in zip(chunk, translated_texts):
+                    translated_subtitles.append({
+                        'start': item['start'],
+                        'duration': item['duration'],
+                        'text': translated_text
+                    })
+                
                 print(f"[INFO] チャンク {i} の翻訳が完了しました")
             
             print(f"[INFO] 全ての翻訳が完了しました（合計 {len(translated_subtitles)} 件）")
