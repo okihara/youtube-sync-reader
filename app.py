@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from trans import process_video, is_already_translated, get_youtube_transcript
+from subtitle_processor import process_video, is_already_translated, get_youtube_transcript
 import re
 import glob
 import json
