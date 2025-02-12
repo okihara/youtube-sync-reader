@@ -13,8 +13,13 @@
             background-color: #f5f5f5;
         }
         .container {
-            background-color: white;
+            max-width: 800px;
+            margin: 0 auto;
             padding: 20px;
+        }
+        .content-container {
+            background-color: white;
+            padding: 30px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             margin-bottom: 20px;
@@ -73,31 +78,35 @@
             margin: 0;
         }
         .video-item {
-            padding: 15px;
+            padding: 20px;
             border-bottom: 1px solid #eee;
             display: flex;
             align-items: center;
-            transition: background-color 0.2s;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            color: inherit;
         }
         .video-item:hover {
-            background-color: #f5f5f5;
+            background-color: #f8f9fa;
+            transform: translateX(5px);
         }
         .video-item:last-child {
             border-bottom: none;
         }
         .video-thumbnail {
-            width: 120px;
-            height: 67.5px;
-            margin-right: 15px;
+            width: 160px;
+            height: 90px;
+            margin-right: 20px;
             border-radius: 4px;
-            background-color: #eee;
+            object-fit: cover;
         }
         .video-info {
             flex: 1;
         }
         .video-title {
-            margin: 0 0 5px 0;
+            margin: 0 0 8px 0;
             font-size: 1.1em;
+            font-weight: 500;
             color: #1a73e8;
             text-decoration: none;
         }
@@ -174,28 +183,29 @@
                         return;
                     }
 
-                    const list = document.createElement('div');
-                    list.className = 'row';
+                    const list = document.createElement('ul');
+                    list.className = 'video-list';
 
                     videos.forEach(video => {
-                        const div = document.createElement('div');
-                        div.className = 'col-md-4';
+                        const li = document.createElement('li');
+                        const a = document.createElement('a');
+                        a.href = `/video.html?v=${video.video_id}`;
+                        a.className = 'video-item';
                         
-                        div.innerHTML = `
+                        a.innerHTML = `
                             <img class="video-thumbnail" 
                                 src="https://i.ytimg.com/vi/${video.video_id}/mqdefault.jpg" 
                                 alt="サムネイル">
                             <div class="video-info">
-                                <a href="/video.html?v=${video.video_id}" class="video-title">
-                                    ${escapeHtml(video.title)}
-                                </a>
+                                <div class="video-title">${escapeHtml(video.title)}</div>
                                 <div class="video-meta">
                                     字幕数: ${video.subtitle_count}
                                 </div>
                             </div>
                         `;
                         
-                        list.appendChild(div);
+                        li.appendChild(a);
+                        list.appendChild(li);
                     });
 
                     container.innerHTML = '';
