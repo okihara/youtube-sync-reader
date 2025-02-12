@@ -24,53 +24,78 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             margin-bottom: 20px;
         }
-        h1, h2 {
-            color: #333;
+        h1 {
+            color: #2c3e50;
+            font-size: 1.8em;
+            margin: 0 0 30px 0;
             text-align: center;
+            font-weight: 500;
         }
-        .form-group {
-            margin-bottom: 20px;
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
         }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            color: #666;
+        .input-field {
+            flex: 1;
+            padding: 12px 16px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            transition: all 0.3s ease;
         }
-        input[type="text"] {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
+        .input-field:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
         }
-        button {
+        .input-field::placeholder {
+            color: #9e9e9e;
+        }
+        .btn {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 500;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+        .btn-primary {
             background-color: #4CAF50;
             color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 100%;
         }
-        button:hover {
-            background-color: #45a049;
+        .btn-primary:hover {
+            background-color: #43a047;
+            transform: translateY(-1px);
         }
-        button:disabled {
-            background-color: #cccccc;
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        .btn:disabled {
+            background-color: #e0e0e0;
             cursor: not-allowed;
+            transform: none;
         }
-        #status {
-            margin-top: 20px;
+        .alert {
             padding: 10px;
             border-radius: 4px;
         }
-        .error {
+        .alert-info {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .alert-danger {
             background-color: #ffebee;
             color: #c62828;
         }
-        .success {
-            background-color: #e8f5e9;
-            color: #2e7d32;
+        .progress {
+            height: 10px;
+            margin-bottom: 10px;
+        }
+        .progress-bar {
+            background-color: #4CAF50;
         }
         .video-list {
             list-style: none;
@@ -122,45 +147,34 @@
             padding: 20px;
             color: #666;
         }
-        .alert {
-            padding: 10px;
-            border-radius: 4px;
-        }
-        .alert-info {
-            background-color: #e8f5e9;
-            color: #2e7d32;
-        }
-        .alert-danger {
-            background-color: #ffebee;
-            color: #c62828;
-        }
-        .progress {
-            height: 10px;
-            margin-bottom: 10px;
-        }
-        .progress-bar {
-            background-color: #4CAF50;
-        }
     </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <h1>YouTube 字幕翻訳</h1>
-        <div class="mb-4">
-            <input type="text" id="videoUrl" class="form-control" placeholder="YouTubeのURLを入力">
-            <button onclick="translateVideo()" class="btn btn-primary mt-2">翻訳開始</button>
-        </div>
-        
-        <!-- ジョブ状態表示エリア -->
-        <div id="jobStatus" class="alert alert-info d-none">
-            <p id="jobStatusMessage"></p>
-            <div class="progress d-none">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+    <div class="container">
+        <div class="content-container">
+            <h1>YouTube 字幕翻訳</h1>
+            
+            <div class="input-group">
+                <input type="text" 
+                    class="input-field" 
+                    id="videoUrl" 
+                    placeholder="YouTubeのURLを入力してください"
+                    autocomplete="off"
+                    spellcheck="false">
+                <button onclick="translateVideo()" class="btn btn-primary">翻訳開始</button>
             </div>
-        </div>
 
-        <div id="translatedVideos" class="row">
-            <!-- 翻訳済み動画一覧がここに表示されます -->
+            <!-- ジョブ状態表示エリア -->
+            <div id="jobStatus" class="alert alert-info d-none">
+                <p id="jobStatusMessage"></p>
+                <div class="progress d-none">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                </div>
+            </div>
+
+            <div id="translatedVideos">
+                <!-- 翻訳済み動画一覧がここに表示されます -->
+            </div>
         </div>
     </div>
 
