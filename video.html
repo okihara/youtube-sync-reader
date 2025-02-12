@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube 字幕翻訳 - 動画再生</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        #player {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+        }
+        #transcriptContainer {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 20px;
+            padding: 10px;
+        }
+        .subtitle {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            background-color: #f8f8f8;
+            display: flex;
+            align-items: flex-start;
+        }
+        .subtitle.current {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196F3;
+        }
+        .subtitle-time {
+            min-width: 100px;
+            color: #666;
+            font-size: 0.9em;
+            padding-right: 10px;
+            font-family: monospace;
+        }
+        .subtitle-text {
+            flex: 1;
+        }
+        .back-button {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #666;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .back-button:hover {
+            background-color: #555;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-button">← 戻る</a>
+    <div class="container">
+        <h1>YouTube 字幕翻訳</h1>
+        <div id="player"></div>
+        <div id="transcriptContainer">
+            <h3>字幕</h3>
+        </div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        let player;
+        let transcripts = [];
+        let currentIndex = 0;
+        let checkTimeInterval;
+        let speechSynth = window.speechSynthesis;
+        let currentUtterance = null;
+
+        // URLからビデオIDを取得
+        const urlParams = new URLSearchParams(window.location.search);
+        const videoId = urlParams.get('v');
+
+        if (!videoId) {
+            window.location.href = '/';
+        }
+
+        // 日本語の音声を取得
+        function getJapaneseVoice() {
+            const voices = speechSynthesis.getVoices();
+            return voices.find(voice => voice.lang === 'ja-JP') || voices[0];
+        }
+
+        // 動画の再生状態が変更されたときの処理
+        function onPlayerStateChange(event) {
+            switch (event.data) {
+                case YT.PlayerState.PLAYING:
+                    checkTimeInterval = setInterval(checkCurrentTime, 100);
+                    break;
+                case YT.PlayerState.PAUSED:
+                case YT.PlayerState.ENDED:
+                    if (currentUtterance) {
+                        speechSynthesis.cancel();
+                        currentUtterance = null;
+                    }
+                    clearInterval(checkTimeInterval);
+                    break;
+            }
+        }
+
+        // 現在の再生時間をチェック
+        function checkCurrentTime() {
+            if (!player || !transcripts.length) return;
+
+            const currentTime = player.getCurrentTime();
+            let foundSubtitle = false;
+
+            for (let i = 0; i < transcripts.length; i++) {
+                const subtitle = transcripts[i];
+                const start = subtitle.start;
+                const end = start + subtitle.duration;
+
+                if (currentTime >= start && currentTime < end) {
+                    foundSubtitle = true;
+                    if (i !== currentIndex) {
+                        currentIndex = i;
+                        readCurrentSubtitle();
+                    }
+                    break;
+                }
+            }
+
+            if (!foundSubtitle) {
+                currentIndex = -1;
+            }
+
+            updateSubtitleDisplay();
+        }
+
+        // 現在の字幕を読み上げ
+        function readCurrentSubtitle() {
+            if (currentUtterance) {
+                speechSynthesis.cancel();
+            }
+
+            if (currentIndex >= 0 && currentIndex < transcripts.length) {
+                const text = transcripts[currentIndex].text;
+                currentUtterance = new SpeechSynthesisUtterance(text);
+                currentUtterance.voice = getJapaneseVoice();
+                currentUtterance.rate = 1.0;
+                speechSynthesis.speak(currentUtterance);
+            }
+        }
+
+        // YouTubeプレーヤーの準備完了時
+        function onYouTubeIframeAPIReady() {
+            loadPlayer(videoId);
+        }
+
+        // プレーヤーの読み込み
+        function loadPlayer(videoId) {
+            player = new YT.Player('player', {
+                videoId: videoId,
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+
+        // プレーヤーの準備完了時
+        function onPlayerReady(event) {
+            loadTranscripts(videoId);
+        }
+
+        // 字幕データの読み込み
+        function loadTranscripts(videoId) {
+            fetch(`/api/transcripts/${videoId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('字幕データの取得に失敗しました');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    transcripts = data;
+                    displayTranscripts(transcripts);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert(error.message);
+                });
+        }
+
+        // 時間のフォーマット
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            seconds = Math.floor(seconds % 60);
+            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // 字幕の表示
+        function displayTranscripts(transcripts) {
+            const container = document.getElementById('transcriptContainer');
+            const subtitlesHtml = transcripts.map((subtitle, index) => `
+                <div class="subtitle" data-index="${index}">
+                    <span class="subtitle-time">${formatTime(subtitle.start)}</span>
+                    <span class="subtitle-text">${subtitle.text}</span>
+                </div>
+            `).join('');
+            
+            container.innerHTML = '<h3>字幕</h3>' + subtitlesHtml;
+        }
+
+        // 字幕表示の更新
+        function updateSubtitleDisplay() {
+            const subtitles = document.querySelectorAll('.subtitle');
+            subtitles.forEach((subtitle, index) => {
+                if (index === currentIndex) {
+                    subtitle.classList.add('current');
+                    subtitle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                    subtitle.classList.remove('current');
+                }
+            });
+        }
+    </script>
+</body>
+</html>

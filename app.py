@@ -77,5 +77,9 @@ def get_transcripts(video_id):
 def index():
     return app.send_static_file('index.html')
 
+@app.route('/video.html')
+def video():
+    return app.send_static_file('video.html')
+
 if __name__ == '__main__':
     app.run(host='127.0.0.1', debug=True)
