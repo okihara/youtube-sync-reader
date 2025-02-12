@@ -147,6 +147,49 @@
             padding: 20px;
             color: #666;
         }
+        .bookmarklet {
+            margin-top: 40px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .bookmarklet h2 {
+            font-size: 1.4em;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+
+        .bookmarklet p {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+
+        .bookmarklet-link {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #2196F3;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 500;
+            margin-bottom: 15px;
+        }
+
+        .bookmarklet-link:hover {
+            background-color: #1976D2;
+        }
+
+        .bookmarklet-steps {
+            list-style-type: decimal;
+            padding-left: 20px;
+            color: #666;
+        }
+
+        .bookmarklet-steps li {
+            margin-bottom: 8px;
+        }
     </style>
 </head>
 <body>
@@ -174,6 +217,21 @@
 
             <div id="translatedVideos">
                 <!-- 翻訳済み動画一覧がここに表示されます -->
+            </div>
+
+            <div class="bookmarklet">
+                <h2>ブックマークレット</h2>
+                <p>YouTubeの動画ページから直接このサービスを利用できます。以下のリンクをブックマークバーにドラッグ＆ドロップしてください。</p>
+                
+                <a href="javascript:(function(){var videoId=new URLSearchParams(window.location.search).get('v');if(videoId){window.open('http://localhost:5000/video.html?v='+videoId,'_blank');}else{alert('YouTubeの動画ページで実行してください。');}})()" class="bookmarklet-link">YouTube字幕翻訳</a>
+                
+                <p>使い方：</p>
+                <ol class="bookmarklet-steps">
+                    <li>上記の「YouTube字幕翻訳」リンクをブックマークバーにドラッグ＆ドロップ</li>
+                    <li>YouTubeの動画ページを開く</li>
+                    <li>ブックマークバーの「YouTube字幕翻訳」をクリック</li>
+                    <li>新しいタブで字幕翻訳ページが開きます</li>
+                </ol>
             </div>
         </div>
     </div>
