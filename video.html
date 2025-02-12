@@ -7,18 +7,71 @@
     <style>
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
+            margin: 0;
             padding: 20px;
             background-color: #f5f5f5;
         }
+
         .container {
+            max-width: 1200px;
+            margin: 0 auto;
             background-color: white;
-            padding: 20px;
+            padding: 30px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
         }
+
+        .back-button {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #666;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin: 0 0 30px 0;
+            font-size: 1.8em;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9のアスペクト比 */
+            margin-bottom: 30px;
+        }
+
+        #player {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .content-wrapper {
+            display: flex;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        #transcriptContainer {
+            flex: 1;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 20px;
+        }
+
         .no-subtitles {
             text-align: center;
             padding: 40px 20px;
@@ -26,10 +79,12 @@
             border-radius: 8px;
             margin: 20px 0;
         }
+
         .no-subtitles p {
             color: #666;
             margin-bottom: 20px;
         }
+
         .translate-button {
             display: inline-block;
             padding: 12px 24px;
@@ -43,29 +98,16 @@
             transition: all 0.3s ease;
             text-decoration: none;
         }
+
         .translate-button:hover {
             background-color: #43a047;
             transform: translateY(-1px);
         }
+
         .translate-button:active {
             transform: translateY(0);
         }
-        h1 {
-            color: #333;
-            text-align: center;
-        }
-        #player {
-            width: 100%;
-            aspect-ratio: 16 / 9;
-        }
-        #transcriptContainer {
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-top: 20px;
-            padding: 10px;
-        }
+
         .subtitle {
             padding: 10px;
             margin: 5px 0;
@@ -74,10 +116,12 @@
             display: flex;
             align-items: flex-start;
         }
+
         .subtitle.current {
             background-color: #e3f2fd;
             border-left: 4px solid #2196F3;
         }
+
         .subtitle-time {
             min-width: 100px;
             color: #666;
@@ -85,21 +129,11 @@
             padding-right: 10px;
             font-family: monospace;
         }
+
         .subtitle-text {
             flex: 1;
         }
-        .back-button {
-            display: inline-block;
-            padding: 8px 16px;
-            background-color: #666;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            margin-bottom: 20px;
-        }
-        .back-button:hover {
-            background-color: #555;
-        }
+
         .job-status {
             margin-top: 15px;
             padding: 12px;
@@ -108,6 +142,7 @@
             color: #2e7d32;
             display: none;
         }
+
         .job-status .spinner {
             display: inline-block;
             width: 16px;
@@ -119,6 +154,7 @@
             margin-right: 8px;
             vertical-align: middle;
         }
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
@@ -128,16 +164,20 @@
     <a href="/" class="back-button">← 戻る</a>
     <div class="container">
         <h1>YouTube 字幕翻訳</h1>
-        <div id="player"></div>
-        <div id="transcriptContainer">
-            <h3>字幕</h3>
+        <div class="video-container">
+            <div id="player"></div>
         </div>
-        <div id="noSubtitles" class="no-subtitles" style="display: none;">
-            <p>この動画にはまだ日本語字幕がありません</p>
-            <button onclick="startTranslation()" class="translate-button">翻訳を開始する</button>
-            <div id="jobStatus" class="job-status">
-                <span class="spinner"></span>
-                <span id="jobStatusText">翻訳を準備中...</span>
+        <div class="content-wrapper">
+            <div id="transcriptContainer">
+                <h3>字幕</h3>
+            </div>
+            <div id="noSubtitles" class="no-subtitles" style="display: none;">
+                <p>この動画にはまだ日本語字幕がありません</p>
+                <button onclick="startTranslation()" class="translate-button">翻訳を開始する</button>
+                <div id="jobStatus" class="job-status">
+                    <span class="spinner"></span>
+                    <span id="jobStatusText">翻訳を準備中...</span>
+                </div>
             </div>
         </div>
     </div>
