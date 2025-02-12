@@ -113,35 +113,57 @@
             padding: 20px;
             color: #666;
         }
+        .alert {
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .alert-info {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .alert-danger {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .progress {
+            height: 10px;
+            margin-bottom: 10px;
+        }
+        .progress-bar {
+            background-color: #4CAF50;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container mt-5">
         <h1>YouTube 字幕翻訳</h1>
-        <div class="form-group">
-            <label for="url">YouTube URL:</label>
-            <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=...">
+        <div class="mb-4">
+            <input type="text" id="videoUrl" class="form-control" placeholder="YouTubeのURLを入力">
+            <button onclick="translateVideo()" class="btn btn-primary mt-2">翻訳開始</button>
         </div>
-        <button id="submit" onclick="processVideo()">翻訳開始</button>
-        <div id="status" style="display: none;"></div>
-    </div>
+        
+        <!-- ジョブ状態表示エリア -->
+        <div id="jobStatus" class="alert alert-info d-none">
+            <p id="jobStatusMessage"></p>
+            <div class="progress d-none">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+            </div>
+        </div>
 
-    <div class="container">
-        <h2>翻訳済み動画一覧</h2>
-        <div id="videoList">
-            <div class="loading">読み込み中...</div>
+        <div id="translatedVideos" class="row">
+            <!-- 翻訳済み動画一覧がここに表示されます -->
         </div>
     </div>
 
     <script>
         // ページ読み込み時に翻訳済み動画リストを取得
-        document.addEventListener('DOMContentLoaded', loadVideoList);
+        document.addEventListener('DOMContentLoaded', loadTranslatedVideos);
 
-        function loadVideoList() {
+        function loadTranslatedVideos() {
             fetch('/api/videos')
                 .then(response => response.json())
                 .then(videos => {
-                    const container = document.getElementById('videoList');
+                    const container = document.getElementById('translatedVideos');
                     if (videos.error) {
                         container.innerHTML = `<div class="error">エラー: ${videos.error}</div>`;
                         return;
@@ -152,14 +174,14 @@
                         return;
                     }
 
-                    const list = document.createElement('ul');
-                    list.className = 'video-list';
+                    const list = document.createElement('div');
+                    list.className = 'row';
 
                     videos.forEach(video => {
-                        const li = document.createElement('li');
-                        li.className = 'video-item';
+                        const div = document.createElement('div');
+                        div.className = 'col-md-4';
                         
-                        li.innerHTML = `
+                        div.innerHTML = `
                             <img class="video-thumbnail" 
                                 src="https://i.ytimg.com/vi/${video.video_id}/mqdefault.jpg" 
                                 alt="サムネイル">
@@ -173,14 +195,14 @@
                             </div>
                         `;
                         
-                        list.appendChild(li);
+                        list.appendChild(div);
                     });
 
                     container.innerHTML = '';
                     container.appendChild(list);
                 })
                 .catch(error => {
-                    const container = document.getElementById('videoList');
+                    const container = document.getElementById('translatedVideos');
                     container.innerHTML = `<div class="error">エラー: ${error.message}</div>`;
                 });
         }
@@ -200,55 +222,83 @@
             return null;
         }
 
-        function showStatus(message, type) {
-            const statusDiv = document.getElementById('status');
-            statusDiv.textContent = message;
-            statusDiv.className = type;
-            statusDiv.style.display = 'block';
+        async function translateVideo() {
+            const videoUrl = document.getElementById('videoUrl').value;
+            if (!videoUrl) {
+                alert('URLを入力してください');
+                return;
+            }
+
+            try {
+                // 翻訳ジョブを開始
+                const response = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ video_id: extractVideoId(videoUrl) })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    showJobStatus(data);
+                    if (data.status === 'pending') {
+                        // ジョブの状態を定期的に確認
+                        pollJobStatus(data.job_id);
+                    }
+                } else {
+                    showError(data.error || '翻訳の開始に失敗しました');
+                }
+            } catch (error) {
+                showError('エラーが発生しました: ' + error);
+            }
         }
 
-        function processVideo() {
-            const urlInput = document.getElementById('url');
-            const submitButton = document.getElementById('submit');
-            const url = urlInput.value.trim();
+        function showJobStatus(jobData) {
+            const statusDiv = document.getElementById('jobStatus');
+            const messageEl = document.getElementById('jobStatusMessage');
+            const progressBar = statusDiv.querySelector('.progress');
             
-            if (!url) {
-                showStatus('URLを入力してください', 'error');
-                return;
+            statusDiv.className = 'alert alert-info';
+            messageEl.textContent = jobData.message || `ステータス: ${jobData.status}`;
+            
+            if (jobData.status === 'processing') {
+                progressBar.classList.remove('d-none');
+            } else {
+                progressBar.classList.add('d-none');
             }
+            
+            statusDiv.classList.remove('d-none');
+        }
 
-            const videoId = extractVideoId(url);
-            if (!videoId) {
-                showStatus('有効なYouTube URLではありません', 'error');
-                return;
-            }
-
-            submitButton.disabled = true;
-            showStatus('処理を開始しています...', 'success');
-
-            fetch('/api/process', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ url: url })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                showStatus(data.message, 'success');
+        async function pollJobStatus(jobId) {
+            try {
+                const response = await fetch(`/api/job_status/${jobId}`);
+                const jobData = await response.json();
                 
-                if (data.status === 'completed' || data.status === 'processing') {
-                    // 動画ページへリダイレクト
-                    window.location.href = `/video.html?v=${videoId}`;
+                showJobStatus(jobData);
+                
+                if (jobData.status === 'pending' || jobData.status === 'processing') {
+                    // 3秒後に再度確認
+                    setTimeout(() => pollJobStatus(jobId), 3000);
+                } else if (jobData.status === 'completed') {
+                    // 翻訳が完了したら動画一覧を更新
+                    loadTranslatedVideos();
                 }
-            })
-            .catch(error => {
-                showStatus(error.message, 'error');
-                submitButton.disabled = false;
-            });
+            } catch (error) {
+                showError('ジョブ状態の取得に失敗しました: ' + error);
+            }
+        }
+
+        function showError(message) {
+            const statusDiv = document.getElementById('jobStatus');
+            const messageEl = document.getElementById('jobStatusMessage');
+            const progressBar = statusDiv.querySelector('.progress');
+            
+            statusDiv.className = 'alert alert-danger';
+            messageEl.textContent = message;
+            progressBar.classList.add('d-none');
+            statusDiv.classList.remove('d-none');
         }
 
         // HTMLエスケープ

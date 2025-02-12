@@ -6,9 +6,13 @@ import glob
 import json
 import os
 from typing import List, Dict
+from job_queue import JobQueue
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
+
+# ジョブキューの初期化
+job_queue = JobQueue()
 
 def extract_video_id(url):
     """YouTubeのURLからビデオIDを抽出する"""
@@ -107,6 +111,39 @@ def list_videos():
         return jsonify(videos)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/translate', methods=['POST'])
+def translate_video():
+    video_id = request.json.get('video_id')
+    if not video_id:
+        return jsonify({'error': 'video_id is required'}), 400
+
+    # 既に翻訳済みかチェック
+    if is_already_translated(video_id):
+        return jsonify({'status': 'completed', 'message': '既に翻訳済みです'})
+
+    # ジョブをキューに追加
+    job_id = job_queue.enqueue(video_id)
+    
+    return jsonify({
+        'job_id': job_id,
+        'status': 'pending',
+        'message': '翻訳ジョブをキューに追加しました'
+    })
+
+@app.route('/api/job_status/<job_id>', methods=['GET'])
+def get_job_status(job_id):
+    job = job_queue.get_job_status(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    return jsonify(job)
+
+@app.route('/api/jobs', methods=['GET'])
+def list_jobs():
+    status = request.args.get('status')
+    jobs = job_queue.list_jobs(status)
+    return jsonify(jobs)
 
 @app.route('/')
 def index():

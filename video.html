@@ -160,7 +160,8 @@
                 const text = transcripts[currentIndex].text;
                 currentUtterance = new SpeechSynthesisUtterance(text);
                 currentUtterance.voice = getJapaneseVoice();
-                currentUtterance.rate = 1.0;
+                currentUtterance.rate = 1.5;
+                currentUtterance.pitch = 0.8;
                 speechSynthesis.speak(currentUtterance);
             }
         }

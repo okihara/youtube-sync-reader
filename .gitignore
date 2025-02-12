@@ -1,3 +1,4 @@
 subtitles/*
 *.pyc
 .env
+jobs/
