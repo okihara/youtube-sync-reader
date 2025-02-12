@@ -5,6 +5,7 @@ import re
 import glob
 import json
 import os
+from typing import List, Dict
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
@@ -21,6 +22,31 @@ def extract_video_id(url):
         if match:
             return match.group(1)
     return None
+
+def get_translated_videos() -> List[Dict]:
+    """翻訳済みの動画リストを取得する"""
+    videos = []
+    # 翻訳済みの字幕ファイルを検索
+    subtitle_files = glob.glob('subtitles/ja_*.json')
+    
+    for file_path in subtitle_files:
+        video_id = file_path.replace('subtitles/ja_', '').replace('.json', '')
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                subtitles = json.load(f)
+                # 最初の字幕からタイトルとして使用
+                title = subtitles[0]['text'] if subtitles else '無題'
+                videos.append({
+                    'video_id': video_id,
+                    'title': title,
+                    'subtitle_count': len(subtitles)
+                })
+        except Exception as e:
+            print(f"Error loading {file_path}: {e}")
+            continue
+    
+    # 字幕数の多い順にソート
+    return sorted(videos, key=lambda x: x['subtitle_count'], reverse=True)
 
 @app.route('/api/process', methods=['POST'])
 def process():
@@ -70,6 +96,15 @@ def get_transcripts(video_id):
             
         return jsonify(transcripts)
         
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/videos')
+def list_videos():
+    """翻訳済みの動画リストを返すAPI"""
+    try:
+        videos = get_translated_videos()
+        return jsonify(videos)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
