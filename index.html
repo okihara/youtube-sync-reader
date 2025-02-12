@@ -223,7 +223,7 @@
                 <h2>ブックマークレット</h2>
                 <p>YouTubeの動画ページから直接このサービスを利用できます。以下のリンクをブックマークバーにドラッグ＆ドロップしてください。</p>
                 
-                <a href="javascript:(function(){var videoId=new URLSearchParams(window.location.search).get('v');if(videoId){window.open('http://localhost:5000/video.html?v='+videoId,'_blank');}else{alert('YouTubeの動画ページで実行してください。');}})()" class="bookmarklet-link">YouTube字幕翻訳</a>
+                <a href="javascript:(function(){var videoId=new URLSearchParams(window.location.search).get('v');if(videoId){window.open(window.location.protocol+'//'+window.location.host+'/video.html?v='+videoId,'_blank');}else{alert('YouTubeの動画ページで実行してください。');}})()" class="bookmarklet-link">YouTube字幕翻訳</a>
                 
                 <p>使い方：</p>
                 <ol class="bookmarklet-steps">
