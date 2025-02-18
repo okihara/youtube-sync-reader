@@ -1,47 +1,23 @@
 import re
 import json
 import os
-import glob
-from datetime import datetime
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.formatters import JSONFormatter
 from translator import Translator, TranslationError
 from dotenv import load_dotenv
+from models import db, Translation
+from typing import List, Dict, Optional, Tuple
 
 # 環境変数の読み込み
 load_dotenv()
 
-# OpenAI APIキーの設定
-# openai.api_key = os.getenv('OPENAI_API_KEY')
-
-def get_youtube_transcript(video_id):
-    """YouTubeの文字起こしを取得する"""
+def get_youtube_transcript(video_id: str) -> Optional[List[Dict]]:
+    """YouTubeの字幕を取得する"""
     try:
-        # 既存の英語字幕ファイルをチェック
-        en_subtitle_path = f"subtitles/en_{video_id}.json"
-        if os.path.exists(en_subtitle_path):
-            print(f"[INFO] 既存の英語字幕を読み込みます: {en_subtitle_path}")
-            with open(en_subtitle_path, "r", encoding="utf-8") as f:
-                transcript = json.load(f)
-                # 既存の字幕もクリーニング
-                for item in transcript:
-                    item['text'] = clean_subtitle_text(item['text'])
-                return transcript
-
-        # 英語字幕を取得
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ja', 'en'])
-        
-        # 字幕テキストをクリーニング
-        for item in transcript:
-            item['text'] = clean_subtitle_text(item['text'])
-        
-        # 字幕を保存
-        print(f"[INFO] 英語字幕を保存します: {en_subtitle_path}")
-        with open(en_subtitle_path, "w", encoding="utf-8") as f:
-            json.dump(transcript, f, ensure_ascii=False, indent=2)
-        
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
         return transcript
     except Exception as e:
-        print(f"文字起こしの取得に失敗しました: {str(e)}")
+        print(f"Error getting transcript: {e}")
         return None
 
 def clean_subtitle_text(text):
@@ -64,63 +40,54 @@ def translate_text(texts):
         print(f"翻訳に失敗しました: {str(e)}")
         return None
 
-def is_already_translated(video_id):
-    """指定されたvideo_idの翻訳ファイルが存在するかチェックする"""
-    try:
-        # 翻訳済みファイルのパターンを作成
-        pattern = f"subtitles/ja_{video_id}.json"
-        return os.path.exists(pattern)
-    except Exception as e:
-        print(f"ファイルチェックに失敗しました: {str(e)}")
-        return False
+def is_already_translated(video_id: str) -> bool:
+    """既に翻訳済みかどうかをチェックする"""
+    return Translation.query.filter_by(video_id=video_id).first() is not None
 
-def process_video(video_id):
-    try:
-        print(f"[INFO] 動画ID {video_id} の処理を開始します")
+def process_video(video_id: str) -> Tuple[bool, Optional[str]]:
+    """動画の字幕を処理する
+    
+    Args:
+        video_id: YouTube動画のID
         
-        if is_already_translated(video_id):
-            print(f"[INFO] 動画ID {video_id} は既に処理済みです")
-            # 翻訳済みファイルを読み込んで返す
-            with open(f"subtitles/ja_{video_id}.json", "r", encoding="utf-8") as f:
-                return json.load(f)
-
+    Returns:
+        Tuple[bool, Optional[str]]: (成功したかどうか, エラーメッセージ)
+    """
+    try:
         # 字幕を取得
-        print(f"[INFO] 字幕データの取得を開始します")
         transcript = get_youtube_transcript(video_id)
         if not transcript:
-            print("[ERROR] 字幕が見つかりませんでした")
-            return
+            return False, '字幕の取得に失敗しました'
 
-        print(f"[INFO] {len(transcript)} 件の字幕データを取得しました")
-        print(f"[DEBUG] 最初の字幕: {transcript[0]}")
-
-        # 翻訳を実行
-        print("[INFO] 翻訳処理を開始します")
+        # 翻訳処理を実行
         translated_data = translate_text(transcript)
         if not translated_data:
-            print("[ERROR] 翻訳処理に失敗しました")
-            return
+            return False, '翻訳処理に失敗しました'
 
-        print(f"[INFO] {len(translated_data)} 件の字幕を翻訳しました")
-        print(f"[DEBUG] 最初の翻訳結果: {translated_data[0]}")
-        
         # 翻訳結果を保存
-        ja_subtitle_path = f"subtitles/ja_{video_id}.json"
-        print(f"[INFO] 翻訳結果を保存します: {ja_subtitle_path}")
-        with open(ja_subtitle_path, "w", encoding="utf-8") as f:
-            json.dump(translated_data, f, ensure_ascii=False, indent=2)
+        translation = Translation(
+            video_id=video_id,
+            title=translated_data[0]['text'] if translated_data else '無題',
+            subtitles=translated_data
+        )
+        db.session.add(translation)
+        db.session.commit()
 
-        return translated_data
+        return True, None
 
     except Exception as e:
-        print(f"[ERROR] 処理に失敗しました: {str(e)}")
-        import traceback
-        print(f"[DEBUG] スタックトレース:\n{traceback.format_exc()}")
-        return None
+        error_message = str(e)
+        print(f"Error processing video: {error_message}")
+        return False, error_message
 
 if __name__ == "__main__":
+    from app import app
     # YouTube動画のID
     video_id = "8Hw2-zAt-fw"
-
-    # 動画の文字起こしと翻訳を処理する
-    process_video(video_id)
+    
+    with app.app_context():
+        success, error = process_video(video_id)
+        if success:
+            print("処理が完了しました")
+        else:
+            print(f"エラーが発生しました: {error}")

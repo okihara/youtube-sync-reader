@@ -2,17 +2,17 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from subtitle_processor import process_video, is_already_translated, get_youtube_transcript
 import re
-import glob
-import json
-import os
+import uuid
 from typing import List, Dict
-from job_queue import JobQueue
+from models import db, Translation, Job
+from config import Config
+from flask_migrate import Migrate
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
-
-# ジョブキューの初期化
-job_queue = JobQueue()
+app.config.from_object(Config)
+db.init_app(app)
+migrate = Migrate(app, db)
 
 def extract_video_id(url):
     """YouTubeのURLからビデオIDを抽出する"""
@@ -29,28 +29,12 @@ def extract_video_id(url):
 
 def get_translated_videos() -> List[Dict]:
     """翻訳済みの動画リストを取得する"""
-    videos = []
-    # 翻訳済みの字幕ファイルを検索
-    subtitle_files = glob.glob('subtitles/ja_*.json')
-    
-    for file_path in subtitle_files:
-        video_id = file_path.replace('subtitles/ja_', '').replace('.json', '')
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                subtitles = json.load(f)
-                # 最初の字幕からタイトルとして使用
-                title = subtitles[0]['text'] if subtitles else '無題'
-                videos.append({
-                    'video_id': video_id,
-                    'title': title,
-                    'subtitle_count': len(subtitles)
-                })
-        except Exception as e:
-            print(f"Error loading {file_path}: {e}")
-            continue
-    
-    # 字幕数の多い順にソート
-    return sorted(videos, key=lambda x: x['subtitle_count'], reverse=True)
+    translations = Translation.query.all()
+    return [{
+        'video_id': t.video_id,
+        'title': t.title or '無題',
+        'subtitle_count': len(t.subtitles)
+    } for t in translations]
 
 @app.route('/api/process', methods=['POST'])
 def process():
@@ -65,7 +49,7 @@ def process():
             return jsonify({'error': '有効なYouTube URLではありません'}), 400
             
         # 既に処理済みかチェック
-        if is_already_translated(video_id):
+        if Translation.query.filter_by(video_id=video_id).first():
             return jsonify({'message': '既に処理済みです', 'status': 'completed', 'video_id': video_id})
             
         # 字幕が利用可能かチェック
@@ -88,17 +72,11 @@ def process():
 @app.route('/api/transcripts/<video_id>')
 def get_transcripts(video_id):
     try:
-        # 翻訳済み字幕ファイルのパス
-        ja_subtitle_path = f"subtitles/ja_{video_id}.json"
-        
-        if not os.path.exists(ja_subtitle_path):
-            return jsonify({'error': '字幕ファイルが見つかりません'}), 404
+        translation = Translation.query.filter_by(video_id=video_id).first()
+        if not translation:
+            return jsonify({'error': '字幕が見つかりません'}), 404
             
-        # ファイルを読み込む
-        with open(ja_subtitle_path, 'r', encoding='utf-8') as f:
-            transcripts = json.load(f)
-            
-        return jsonify(transcripts)
+        return jsonify(translation.subtitles)
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -119,11 +97,14 @@ def translate_video():
         return jsonify({'error': 'video_id is required'}), 400
 
     # 既に翻訳済みかチェック
-    if is_already_translated(video_id):
+    if Translation.query.filter_by(video_id=video_id).first():
         return jsonify({'status': 'completed', 'message': '既に翻訳済みです'})
 
     # ジョブをキューに追加
-    job_id = job_queue.enqueue(video_id)
+    job_id = str(uuid.uuid4())
+    job = Job(id=job_id, video_id=video_id, status='pending')
+    db.session.add(job)
+    db.session.commit()
     
     return jsonify({
         'job_id': job_id,
@@ -133,16 +114,19 @@ def translate_video():
 
 @app.route('/api/job_status/<job_id>', methods=['GET'])
 def get_job_status(job_id):
-    job = job_queue.get_job_status(job_id)
+    job = Job.query.get(job_id)
     if not job:
         return jsonify({'error': 'Job not found'}), 404
     
-    return jsonify(job)
+    return jsonify(job.to_dict())
 
 @app.route('/api/jobs', methods=['GET'])
 def list_jobs():
     status = request.args.get('status')
-    jobs = job_queue.list_jobs(status)
+    query = Job.query
+    if status:
+        query = query.filter_by(status=status)
+    jobs = [job.to_dict() for job in query.all()]
     return jsonify(jobs)
 
 @app.route('/')

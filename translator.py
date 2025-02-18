@@ -28,8 +28,9 @@ class Translator:
             chunk_size: 1チャンクあたりの字幕数
         """
         if api_key:
-            openai.api_key = api_key
-        self.client = openai.OpenAI()
+            self.client = openai.OpenAI(api_key=api_key)
+        else:
+            self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.chunk_size = chunk_size
         os.makedirs(self.TRANSLATION_DIR, exist_ok=True)
 
