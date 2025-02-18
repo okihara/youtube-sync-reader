@@ -158,6 +158,35 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        .subtitle-list {
+            display: none; /* デフォルトで非表示 */
+            margin-top: 20px;
+        }
+
+        .toggle-button {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .toggle-button:hover {
+            background-color: #45a049;
+        }
+
+        .transcript-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .transcript-item.active {
+            background-color: #e3f2fd;
+        }
     </style>
 </head>
 <body>
@@ -167,17 +196,16 @@
         <div class="video-container">
             <div id="player"></div>
         </div>
-        <div class="content-wrapper">
-            <div id="transcriptContainer">
-                <h3>字幕</h3>
-            </div>
-            <div id="noSubtitles" class="no-subtitles" style="display: none;">
-                <p>この動画にはまだ日本語字幕がありません</p>
-                <button onclick="startTranslation()" class="translate-button">翻訳を開始する</button>
-                <div id="jobStatus" class="job-status">
-                    <span class="spinner"></span>
-                    <span id="jobStatusText">翻訳を準備中...</span>
-                </div>
+        <button id="toggleSubtitles" class="toggle-button">字幕リストを表示</button>
+        <div id="subtitleList" class="subtitle-list">
+            <div id="transcriptContainer"></div>
+        </div>
+        <div id="noSubtitles" class="no-subtitles" style="display: none;">
+            <p>この動画にはまだ日本語字幕がありません</p>
+            <button onclick="startTranslation()" class="translate-button">翻訳を開始する</button>
+            <div id="jobStatus" class="job-status">
+                <span class="spinner"></span>
+                <span id="jobStatusText">翻訳を準備中...</span>
             </div>
         </div>
     </div>
@@ -391,28 +419,57 @@
         // 字幕の表示
         function displayTranscripts(transcripts) {
             const container = document.getElementById('transcriptContainer');
-            const subtitlesHtml = transcripts.map((subtitle, index) => `
-                <div class="subtitle" data-index="${index}">
-                    <span class="subtitle-time">${formatTime(subtitle.start)}</span>
-                    <span class="subtitle-text">${subtitle.text}</span>
-                </div>
-            `).join('');
+            container.innerHTML = '';
             
-            container.innerHTML = '<h3>字幕</h3>' + subtitlesHtml;
+            transcripts.forEach((transcript, index) => {
+                const div = document.createElement('div');
+                div.className = 'transcript-item';
+                div.dataset.index = index;
+                div.innerHTML = `
+                    <p><strong>${formatTime(transcript.start)}</strong></p>
+                    <p>${transcript.text}</p>
+                `;
+                container.appendChild(div);
+            });
         }
 
         // 字幕表示の更新
         function updateSubtitleDisplay() {
-            const subtitles = document.querySelectorAll('.subtitle');
-            subtitles.forEach((subtitle, index) => {
-                if (index === currentIndex) {
-                    subtitle.classList.add('current');
-                    subtitle.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                } else {
-                    subtitle.classList.remove('current');
+            const currentTime = player.getCurrentTime();
+            const transcriptItems = document.querySelectorAll('.transcript-item');
+            
+            transcriptItems.forEach((item, index) => {
+                item.classList.remove('active');
+                if (index < transcripts.length - 1) {
+                    if (currentTime >= transcripts[index].start && currentTime < transcripts[index + 1].start) {
+                        item.classList.add('active');
+                        // 現在の字幕が表示されている場合、その位置までスクロール
+                        if (document.getElementById('subtitleList').style.display === 'block') {
+                            item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }
+                } else if (index === transcripts.length - 1 && currentTime >= transcripts[index].start) {
+                    item.classList.add('active');
+                    if (document.getElementById('subtitleList').style.display === 'block') {
+                        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
                 }
             });
         }
+
+        // 字幕リストの表示/非表示を切り替える関数
+        document.getElementById('toggleSubtitles').addEventListener('click', function() {
+            const subtitleList = document.getElementById('subtitleList');
+            const button = document.getElementById('toggleSubtitles');
+            
+            if (subtitleList.style.display === 'block') {
+                subtitleList.style.display = 'none';
+                button.textContent = '字幕リストを表示';
+            } else {
+                subtitleList.style.display = 'block';
+                button.textContent = '字幕リストを非表示';
+            }
+        });
     </script>
 </body>
 </html>
