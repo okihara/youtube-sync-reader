@@ -37,39 +37,6 @@ def get_translated_videos() -> List[Dict]:
         'subtitle_count': len(t.subtitles)
     } for t in translations]
 
-@app.route('/api/process', methods=['POST'])
-def process():
-    try:
-        data = request.get_json()
-        url = data.get('url')
-        if not url:
-            return jsonify({'error': 'URLが必要です'}), 400
-            
-        video_id = extract_video_id(url)
-        if not video_id:
-            return jsonify({'error': '有効なYouTube URLではありません'}), 400
-            
-        # 既に処理済みかチェック
-        if Translation.query.filter_by(video_id=video_id).first():
-            return jsonify({'message': '既に処理済みです', 'status': 'completed', 'video_id': video_id})
-            
-        # 字幕が利用可能かチェック
-        transcript = get_youtube_transcript(video_id)
-        if not transcript:
-            return jsonify({'error': '字幕が利用できません'}), 400
-            
-        # 非同期で処理を開始
-        process_video(video_id)
-        
-        return jsonify({
-            'message': '処理を開始しました',
-            'status': 'processing',
-            'video_id': video_id
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/api/transcripts/<video_id>')
 def get_transcripts(video_id):
     try:
