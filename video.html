@@ -426,7 +426,7 @@
                 div.className = 'transcript-item';
                 div.dataset.index = index;
                 div.innerHTML = `
-                    <p><strong>${formatTime(transcript.start)}</strong></p>
+                    <p><strong>${formatTime(transcript.start)} (${formatTime(transcript.duration)}秒)</strong></p>
                     <p>${transcript.text}</p>
                 `;
                 container.appendChild(div);
