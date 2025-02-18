@@ -7,6 +7,7 @@ from typing import List, Dict
 from models import db, Translation, Job
 from config import Config
 from flask_migrate import Migrate
+import os
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
@@ -138,5 +139,5 @@ def video():
     return app.send_static_file('video.html')
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
